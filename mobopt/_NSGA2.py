@@ -17,10 +17,16 @@ def uniform(bounds):
 
 
 def NSGAII(NObj, objective, pbounds, seed=None, NGEN=100, MU=100, CXPB=0.9):
+    """
+    CXPB: Crossover proba
+    NGEN: Number of generations
+    MU: Population size // effective size of the Pareto front
+    """
     random.seed(seed)
 
     global FirstCall
     if FirstCall:
+        # creates a new class named FitnessMin inheriting from base.Fitness with an additional attribute weights
         creator.create("FitnessMin", base.Fitness, weights=(-1.0,)*NObj)
         creator.create("Individual", array.array, typecode='d',
                        fitness=creator.FitnessMin)
@@ -29,6 +35,7 @@ def NSGAII(NObj, objective, pbounds, seed=None, NGEN=100, MU=100, CXPB=0.9):
 
     NDIM = len(pbounds)
 
+    # Initializers creation
     toolbox.register("attr_float", uniform, pbounds)
 
     toolbox.register("individual",
@@ -44,14 +51,16 @@ def NSGAII(NObj, objective, pbounds, seed=None, NGEN=100, MU=100, CXPB=0.9):
                      tools.cxSimulatedBinaryBounded,
                      low=pbounds[:, 0].tolist(),
                      up=pbounds[:, 1].tolist(),
-                     eta=20.0)
+                     eta=20.0 # crowding degree of the crossover, higher eta means children closer to their parents
+                     )
 
     toolbox.register("mutate",
                      tools.mutPolynomialBounded,
                      low=pbounds[:, 0].tolist(),
                      up=pbounds[:, 1].tolist(),
                      eta=20.0,
-                     indpb=1.0/NDIM)
+                     indpb=1.0/NDIM # independent proba for each attribute to be mutated
+                     )
 
     toolbox.register("select", tools.selNSGA2)
 
@@ -62,6 +71,7 @@ def NSGAII(NObj, objective, pbounds, seed=None, NGEN=100, MU=100, CXPB=0.9):
     logbook = tools.Logbook()
     logbook.header = "gen", "evals", "std", "min", "avg", "max"
 
+    # Create initial pop
     pop = toolbox.population(n=MU)
 
     # Evaluate the individuals with an invalid fitness

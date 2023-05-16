@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+from sklearn.utils import check_random_state
 
 
 class TargetSpace(object):
@@ -21,12 +22,12 @@ class TargetSpace(object):
 
         self.vprint = print if verbose else lambda *a, **k: None
 
-        self.RS = np.random.RandomState(seed=RandomSeed)
+        self.RS = check_random_state(RandomSeed)
 
         self.target_function = target_function
         self.NObj = NObj
 
-        self.ParetoSize = 0
+        self.ParetoSize = 0 # the nb of non-dominated points that have been evaluated
 
         self.pbounds = pbounds
         self.constraints = constraints
@@ -42,11 +43,11 @@ class TargetSpace(object):
         # Number of observations
         self._NObs = 0
 
-        self._X = None
-        self._Y = None          # binary result for dominance
-        self._W = None          # binary result for dominance
-        self._F = None          # result of the target functions
-        self.length = 0
+        self._X = None  # points at which target func has been evaluated
+        self._Y = None  # corresponding dominance (1 if the point is non-dominated, 0 otherwise)
+        self._W = None
+        self._F = None  # corresponding obj funcs values
+        self.length = 0 # Nb of observations stored
 
         return
 
@@ -208,7 +209,7 @@ class TargetSpace(object):
         assert x.size == self.NParam, 'x must have the same dimension'
 
         if self.length >= self._n_alloc_rows:
-            self._allocate((self.length + 1) * 2)
+            self._allocate((self.length + 1) * 2) # increase the arrays to store new observation and future ones
 
         self._X[self.length] = x
         self._F[self.length] = f
@@ -232,7 +233,7 @@ class TargetSpace(object):
         for i in range(self.length-1):
             if self._Y[i] == 1:
                 if self.Larger(self._F[self.length-1], self._F[i]):
-                    self._Y[i] = 0
+                    self._Y[i] = 0 # the new point dominates point i so i is no longer non-dominated
         return
 
     def DominanceWeight(self):
@@ -250,8 +251,8 @@ class TargetSpace(object):
         # returns 1 if non-dominated 0 if dominated
         Dominated = 1
         for i in range(self.length):
-            if self._Y[i] == 1:
-                if self.Larger(self._F[i], f):
+            if self._Y[i] == 1: # point i non-dominated
+                if self.Larger(self._F[i], f): # point i dominates f
                     Dominated = 0
                     break
         return Dominated
@@ -259,10 +260,10 @@ class TargetSpace(object):
     # % Compare two lists
     @staticmethod
     def Larger(X, Y):
-        # test if X > Y
+        # test if X > Y (in the dominance sense)
         Dominates = True
         NumberOfLarger = 0
-        for i, x in enumerate(X):
+        for i, x in enumerate(X): # for each objective
             if x > Y[i]:
                 Dominates = Dominates and True
                 NumberOfLarger += 1

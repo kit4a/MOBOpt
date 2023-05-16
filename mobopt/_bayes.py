@@ -2,9 +2,11 @@
 
 import numpy as np
 import matplotlib.pyplot as pl
+import time
 
 # from sklearn.gaussian_process import GaussianProcessRegressor as GPR
-from sklearn.gaussian_process.kernels import Matern
+from sklearn.gaussian_process.kernels import Matern, ConstantKernel
+from sklearn.utils import check_random_state
 
 from scipy.spatial.distance import directed_hausdorff as HD
 from deap.benchmarks.tools import hypervolume
@@ -68,7 +70,7 @@ class MOBayesianOpt(object):
                Array with the True Pareto Front for calculation of
                convergence metrics
 
-        n_restarts_optimizer -- int (default 100)
+        n_restarts_optimizer -- int (default 10)
              GP parameter, the number of restarts of the optimizer for
              finding the kernel’s parameters which maximize the log-marginal
              likelihood.
@@ -94,7 +96,7 @@ class MOBayesianOpt(object):
 
         kernel -- kernel object
             kernel object to be passed to the gausian process
-            regressor, if None, the default `Matern(nu=1.5)` is used
+            regressor, if None, the default Matern 5/2 of scikit-opt is used
 
             For valid kernel objects, visit:
             https://scikit-learn.org/stable/modules/gaussian_process.html#kernels-for-gaussian-processes)
@@ -108,11 +110,12 @@ class MOBayesianOpt(object):
         self.verbose = verbose
         self.vprint = print if verbose else lambda *a, **k: None
 
-        self.counter = 0
+        self.counter = 0 # iteration counter
         self.constraints = constraints
         self.n_rest_opt = n_restarts_optimizer
         self.Filename = Filename
         self.MetricsPS = MetricsPS
+        self.RandomSeed = RandomSeed
 
         # reset calling variables
         self.__reset__()
@@ -166,13 +169,29 @@ class MOBayesianOpt(object):
         else:
             self.__save_partial = False
 
+        # Set the default kernel
         if kernel is None:
-            kernel = Matern(nu=1.5)
+            kernel = Matern(nu=1.5) # TODO: change this regarding scikit-opt cook_estimator
+            # As in scikit-opt we cook a default estimator by multiplying a constant kernel with the Matern 5/2
+            #cov_amplitude = ConstantKernel(1.0, (0.01, 1000.0)) # means k(x1,x2) = 1.0 value, (0.01, 1000.0) defines the bounds of the constant value for hyperparam tuning
+            #other_kernel = Matern(
+            #    length_scale=np.ones(self.NParam), # length scales are the hyperparams of the kernel
+            #    length_scale_bounds=[(0.01, 100)] * self.NParam, # bounds for the hyperparam tuning
+            #    nu=2.5 # controls smoothness of the function, 2.5 is an important intermediate value for twice differentiable functions
+            #    )
+            #kernel=cov_amplitude * other_kernel
 
+        # Init as many estimators as the nb of objectives
         self.GP = [None] * self.NObj
+        rng = check_random_state(self.RandomSeed)
         for i in range(self.NObj):
-            self.GP[i] = GPR(kernel=kernel,
-                             n_restarts_optimizer=self.n_rest_opt)
+            self.GP[i] = GPR(kernel=kernel, n_restarts_optimizer=self.n_rest_opt)
+            #self.GP[i] = GPR(kernel=kernel,
+            #                 normalize_y=True,
+            #                 noise="gaussian",
+            #                 n_restarts_optimizer=self.n_rest_opt) # TODO: change this regarding scikit-opt cook_estimator
+            # TODO: as in scikit-opt set the seed of the GP
+            self.GP[i].set_params(random_state=rng.randint(0, np.iinfo(np.int32).max))
 
         # store starting points
         self.init_points = []
@@ -183,9 +202,10 @@ class MOBayesianOpt(object):
                 raise ConstraintError(
                     "Equality constraints are not implemented")
 
+        # TODO: space is not normalized
         self.space = TargetSpace(self.target, self.NObj, self.pbounds,
                                  self.constraints,
-                                 RandomSeed=RandomSeed,
+                                 RandomSeed=self.RandomSeed,
                                  verbose=self.verbose)
 
         if self.Picture and self.NObj == 2:
@@ -219,27 +239,31 @@ class MOBayesianOpt(object):
         provided
 
         """
-
+        st = time.time()
         self.N_init_points = 0
         if init_points is not None:
+            self.vprint(f"Start to evaluate {init_points} random points for estimators initialization")
             self.N_init_points += init_points
 
             # initialize first points for the gp fit,
             # random points respecting the bounds of the variables.
-            rand_points = self.space.random_points(init_points)
+            rand_points = self.space.random_points(init_points) # TODO implement lhs initial point generator
             self.init_points.extend(rand_points)
             self.init_points = np.asarray(self.init_points)
 
             # evaluate target function at all intialization points
             for x in self.init_points:
+                self.vprint(f"---> Launch evaluation at x={x}")
                 self.space.observe_point(x)
 
         if Points is not None:
             if Y is None:
+                self.vprint(f"Start to evaluate {len(Points)} points speicified by user ({Points})")
                 for x in Points:
                     self.space.observe_point(np.array(x))
                     self.N_init_points += 1
             else:
+                self.vprint(f"Take into account {len(Points)} points and associated obj funcs values speicified by user ({Points})")
                 for x, y in zip(Points, Y):
                     self.space.add_observation(np.array(x), np.array(y))
                     self.N_init_points += 1
@@ -248,10 +272,9 @@ class MOBayesianOpt(object):
             raise RuntimeError(
                 "A non-zero number of initialization points is required")
 
-        self.vprint("Added points in init")
-        self.vprint(self.space.x)
-
         self.__CalledInit = True
+
+        self.vprint(f"Initialization done in {time.time() - st} seconds")
 
         return
 
@@ -349,48 +372,61 @@ class MOBayesianOpt(object):
             self.space._allocate(self.N_init_points+n_iter)
 
         self.q = q
-        self.NewProb = prob
+        self.NewProb = prob # proba of choosing next point randomly
 
         self.vprint("Start optimization loop")
 
         for i in range(n_iter):
 
-            self.vprint(i, " of ", n_iter)
+            st = time.time()
+
             if ReduceProb:
+                # proba of choosing next point randomly decreases till 0 at the final iteration
                 self.NewProb = prob * (1.0 - self.counter/n_iter)
+            self.vprint(f"---> Iteration {i}/{n_iter} (r = {self.NewProb:4.2f})")
 
+            # Update estimators on observations
             for i in range(self.NObj):
-                yy = self.space.f[:, i]
-                self.GP[i].fit(self.space.x, yy)
+                yy = self.space.f[:, i] # all obj func i values for the observed points
+                self.GP[i].fit(self.space.x, yy) # update the GP
 
+            # Compute the estimated Pareto Front based on estimators and NSGA-II
+            # pop is the final pop found, it is the estimated Pareto set, front is
+            # the estimated Pareto Front, logbook contains info about the evol process
             pop, logbook, front = NSGAII(self.NObj,
-                                         self.__ObjectiveGP,
+                                         self.__ObjectiveGP, # estimated target function
                                          self.pbounds,
-                                         MU=n_pts)
+                                         MU=n_pts, # effective size of the Pareto Front
+                                         seed=self.RandomSeed,
+                                         NGEN=100,
+                                         CXPB=0.9
+                                         )
 
             Population = np.asarray(pop)
             IndexF, FatorF = self.__LargestOfLeast(front, self.space.f)
+            # IndexF is the index in front of the point, not really used
+            # FatorF is the (d_{l,f} - \mu_f)/ \sigma_f for all l in the estimated Pareto front
             IndexPop, FatorPop = self.__LargestOfLeast(Population,
                                                        self.space.x)
+            # same for Pareto set
 
+            # Select one point based on a mix of both Pareto set and front indicators
             Fator = self.q * FatorF + (1-self.q) * FatorPop
             Index_try = np.argmax(Fator)
 
-            self.vprint("IF = ", IndexF,
-                        " IP = ", IndexPop,
-                        " Try = ", Index_try)
-
-            self.vprint("Front at = ", -front[Index_try])
-
             self.x_try = Population[Index_try]
+
+            self.vprint(f"    Promising next point {self.x_try} (front there = {-front[Index_try]})")
 
             if self.Picture:
                 plot_1dgp(fig=self.fig, ax=self.ax, space=self.space,
                           iterations=self.counter+len(self.init_points),
                           Front=front, last=Index_try)
 
+            # Check if next point should be selected randomly
             if self.space.RS.uniform() < self.NewProb:
-
+                # Select randomly one decision var (compononent of x) that will be changed
+                # to random value within bounds
                 if self.NParam > 1:
                     ii = self.space.RS.randint(low=0, high=self.NParam - 1)
                 else:
@@ -400,17 +436,20 @@ class MOBayesianOpt(object):
                     low=self.pbounds[ii][0],
                     high=self.pbounds[ii][1])
 
-                self.vprint("Random Point at ", ii, " coordinate")
+                self.vprint(f"    Modify next point coordinate {ii} by a random value")
 
             dummy = self.space.observe_point(self.x_try)  # noqa
 
+            # Get current Pareto set and front
             self.y_Pareto, self.x_Pareto = self.space.ParetoSet()
+
+            # Update iteration counter
             self.counter += 1
 
-            self.vprint(f"|PF| = {self.space.ParetoSize:4d} at"
-                        f" {self.counter:4d}"
-                        f" of {n_iter:4d}, w/ r = {self.NewProb:4.2f}")
+            self.vprint(f"    Nb of points in the current Pareto set = {self.space.ParetoSize:4d}")
 
+            # Frequently save results
+            # TODO: save info for plots and follow up of the MOBO process
             if self.__save_partial:
                 for NFront in FrontSampling:
                     if (self.counter % SaveInterval == 0) and \
@@ -424,15 +463,24 @@ class MOBayesianOpt(object):
                     self.__PrintOutput(front[Ind, :], PopInd,
                                        SaveFile)
 
+            self.vprint(f"Iteration done in {time.time() - st} seconds")
+
         return front, np.asarray(pop)
 
     def __LargestOfLeast(self, front, F):
+        """
+        Computes the least distance from each point in the estimated Pareto Front/Set
+        to all other points in the current Pareto Front/Set (based on observations)
+
+        front: estimated Pareto Front/Set
+        F: current Pareto Front/Set (based on observations)
+        """
         NF = len(front)
         MinDist = np.empty(NF)
         for i in range(NF):
-            MinDist[i] = self.__MinimalDistance(-front[i], F)
+            MinDist[i] = self.__MinimalDistance(-front[i], F) # min dist between point i of front and all points in F
 
-        ArgMax = np.argmax(MinDist)
+        ArgMax = np.argmax(MinDist) # select the point in front that is the farthest away from all previously observed points
 
         Mean = MinDist.mean()
         Std = np.std(MinDist)
@@ -469,7 +517,7 @@ class MOBayesianOpt(object):
             SSPS = np.nan
             HDPS = np.nan
 
-        self.vprint(f"NFront = {NFront}, GD = {GenDist:7.3e} |"
+        self.vprint(f"    NFront = {NFront}, GD = {GenDist:7.3e} |"
                     f" SS = {SS:7.3e} | HV = {HV:7.3e} ")
 
         if SaveFile:

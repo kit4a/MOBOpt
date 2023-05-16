@@ -8,6 +8,8 @@ import mobopt as mo
 import deap.benchmarks as db
 import argparse
 
+SEED = 932
+
 
 def target(x):
     return np.asarray(db.zdt1(x))
@@ -18,7 +20,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", dest="ND", type=int, metavar="ND",
                         help="Number of Dimensions for ZDT1",
-                        default=30,
+                        default=3,
                         required=False)
     parser.add_argument("-i", dest="NI", type=int, metavar="NI",
                         help="Number of iterations of the method",
@@ -34,7 +36,7 @@ def main():
                         required=False, default=5)
     parser.add_argument("-nr", dest="NRest", type=int, metavar="N Restarts",
                         help="Number of restarts of GP optimizer",
-                        required=False, default=100)
+                        required=False, default=10)
     parser.add_argument("-v", dest="verbose", action='store_true',
                         help="Verbose")
     parser.add_argument("--filename", dest="Filename", type=str,
@@ -47,7 +49,7 @@ def main():
 
     args = parser.parse_args()
 
-    NParam = args.ND
+    NParam = args.ND # nb of decision vars
     NIter = args.NI
     if 0 <= args.Prob <= 1.0:
         Prob = args.Prob
@@ -57,23 +59,24 @@ def main():
     verbose = args.verbose
     Q = args.Q
 
-    PB = np.asarray([[0, 1]]*NParam)
+    PB = np.asarray([[0, 1]]*NParam) # search space dim
 
     f1 = np.linspace(0, 1, 1000)
-    f2 = (1-np.sqrt(f1))
+    f2 = (1-np.sqrt(f1)) # True Pareto Front
 
     Optimize = mo.MOBayesianOpt(target=target,
                                 NObj=2,
                                 pbounds=PB,
                                 Picture=True,
-                                MetricsPS=False,
+                                MetricsPS=False, # whether or not to calculate metrics with the Pareto Set points
                                 TPF=np.asarray([f1, f2]).T,
                                 verbose=verbose,
                                 n_restarts_optimizer=args.NRest,
                                 Filename=args.Filename,
-                                max_or_min='min')
+                                max_or_min='min',
+                                RandomSeed=SEED)
 
-    Optimize.initialize(init_points=N_init)
+    Optimize.initialize(init_points=N_init) # launch N_init evaluations at random points
 
     front, pop = Optimize.maximize(n_iter=NIter,
                                    prob=Prob,
@@ -97,6 +100,7 @@ def main():
     fig, ax = pl.subplots(1, 1)
     ax.plot(f1, f2, '-', label="TPF")
     ax.scatter(front[:, 0], front[:, 1], label=r"$\chi$")
+    ax.scatter(-PF[:, 0], -PF[:, 1], label="F", color='red')
     ax.grid()
     ax.set_xlabel(r'$f_1$')
     ax.set_ylabel(r'$f_2$')
@@ -107,8 +111,8 @@ def main():
     Delta = mo.metrics.Spread2D(front, np.asarray([f1, f2]).T)
 
     if verbose:
-        print("GenDist = ", GenDist)
-        print("Delta = ", Delta)
+        print("Distance between found PF and true PF = ", GenDist)
+        print("Delta (another indicator) = ", Delta)
 
     pass
 
