@@ -96,7 +96,7 @@ class MOBayesianOpt(object):
 
         kernel -- kernel object
             kernel object to be passed to the gausian process
-            regressor, if None, the default Matern 5/2 of scikit-opt is used
+            regressor, if None, the default `Matern(nu=1.5)` is used
 
             For valid kernel objects, visit:
             https://scikit-learn.org/stable/modules/gaussian_process.html#kernels-for-gaussian-processes)
@@ -388,7 +388,8 @@ class MOBayesianOpt(object):
             # Update estimators on observations
             for i in range(self.NObj):
                 yy = self.space.f[:, i] # all obj func i values for the observed points
-                self.GP[i].fit(self.space.x, yy) # update the GP
+                #self.GP[i].fit(self.space.x, yy) # update the GP
+                self.GP[i].fit(self.space.normalize(self.space.x), yy) # update the GP
 
             # Compute the estimated Pareto Front based on estimators and NSGA-II
             # pop is the final pop found, it is the estimated Pareto set, front is
@@ -596,7 +597,6 @@ class MOBayesianOpt(object):
         return Soma / len(Y)
 
     # % Define the function to be optimized by nsga2
-
     def __ObjectiveGP(self, x):
 
         Fator = 1.0e10
@@ -613,7 +613,8 @@ class MOBayesianOpt(object):
                     Constraints -= y
 
         for i in range(self.NObj):
-            F[i] = -self.GP[i].predict(xx)[0] + Fator * Constraints
+            #F[i] = -self.GP[i].predict(xx)[0] + Fator * Constraints
+            F[i] = -self.GP[i].predict(self.space.normalize(xx))[0] + Fator * Constraints
 
         return F
 
@@ -663,7 +664,8 @@ class MOBayesianOpt(object):
 
         for i in range(self.NObj):
             yy = self.space.f[:, i]
-            self.GP[i].fit(self.space.x, yy)
+            #self.GP[i].fit(self.space.x, yy)
+            self.GP[i].fit(self.space.normalize(self.space.x), yy)
 
         self.__CalledInit = True
         self.N_init_points = self.space._NObs

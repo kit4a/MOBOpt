@@ -2,6 +2,25 @@
 
 import numpy as np
 from sklearn.utils import check_random_state
+from skopt.space.transformers import Pipeline, Identity, Normalize
+
+
+def _transpose_list_array(x):
+    """Transposes a list matrix
+
+    From skopt.
+    """
+
+    n_dims = len(x)
+    assert n_dims > 0
+    n_samples = len(x[0])
+    rows = [None] * n_samples
+    for i in range(n_samples):
+        r = [None] * n_dims
+        for j in range(n_dims):
+            r[j] = x[j][i]
+        rows[i] = r
+    return rows
 
 
 class TargetSpace(object):
@@ -127,6 +146,67 @@ class TargetSpace(object):
                 raise KeyError(f"key ({key}) larger than {self.length}")
         else:
             raise TypeError(f"Invalid key type for space")
+
+    # % TRANSFORM
+    def normalize(self, X):
+        """
+        Normalize points in X.
+
+        Keyword Arguments:
+        X -- Array of points to normalize
+
+        Returns:
+        Xt -- Array of normalized points
+        """
+        return X
+        # Pack by dimension
+        columns = []
+        for dim in range(self.NParam):
+            columns.append([])
+        for i in range(len(X)):
+            for j in range(self.NParam):
+                columns[j].append(X[i][j])
+
+        # Normalize
+        for j,bounds in enumerate(self.pbounds):
+            transformer = Pipeline([Identity(), Normalize(bounds[0], bounds[1])])
+            columns[j] = transformer.transform(columns[j])
+
+        # Repack as an array
+        Xt = np.hstack([np.asarray(c).reshape((len(X), -1)) for c in columns])
+
+        return Xt
+
+
+    def inverse_normalize(self, Xt):
+        """Inverse normalize points in Xt.
+
+        Keyword Arguments:
+        Xt -- Array of points to inverse normalize
+
+        Returns:
+        X -- Array of inverse normalized points
+        """
+        return Xt
+
+        # Proceed one dimension at a time
+        columns = []
+        Xt = np.asarray(self.NParam)
+        for j, bounds in enumerate(self.pbounds):
+            transformer = Pipeline([Identity(), Normalize(bounds[0], bounds[1])])
+            inv_transform = transformer.inverse_transform(Xt[:, j])
+            # Deal with var format and types
+            if isinstance(inv_transform, list):
+                inv_transform = np.asarray(inv_transform)
+            inv_transform = np.clip(inv_transform, bounds[0], bounds[1]).astype(float)
+            # necessary, otherwise the type is converted to a numpy type
+            inv_transform = getattr(inv_transform, "tolist", lambda: value)()
+            columns.append(inv_transform)
+
+        # Transpose
+        X = _transpose_list_array(columns)
+
+        return X
 
 
     # % RANDOM POINTS
