@@ -8,7 +8,7 @@ import mobopt as mo
 import deap.benchmarks as db
 import argparse
 
-SEED = 932
+SEED = 85000
 
 
 def target(x):
@@ -20,7 +20,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", dest="ND", type=int, metavar="ND",
                         help="Number of Dimensions for ZDT1",
-                        default=3,
+                        default=30,
                         required=False)
     parser.add_argument("-i", dest="NI", type=int, metavar="NI",
                         help="Number of iterations of the method",
@@ -36,7 +36,7 @@ def main():
                         required=False, default=5)
     parser.add_argument("-nr", dest="NRest", type=int, metavar="N Restarts",
                         help="Number of restarts of GP optimizer",
-                        required=False, default=10)
+                        required=False, default=100)
     parser.add_argument("-v", dest="verbose", action='store_true',
                         help="Verbose")
     parser.add_argument("--filename", dest="Filename", type=str,

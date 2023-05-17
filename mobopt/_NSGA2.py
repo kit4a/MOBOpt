@@ -22,10 +22,10 @@ def NSGAII(NObj, objective, pbounds, seed=None, NGEN=100, MU=100, CXPB=0.9):
     NGEN: Number of generations
     MU: Population size // effective size of the Pareto front
     """
-    random.seed(seed)
 
     global FirstCall
     if FirstCall:
+        random.seed(seed) # not a good practice...
         # creates a new class named FitnessMin inheriting from base.Fitness with an additional attribute weights
         creator.create("FitnessMin", base.Fitness, weights=(-1.0,)*NObj)
         creator.create("Individual", array.array, typecode='d',
