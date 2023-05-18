@@ -3,6 +3,7 @@
 import numpy as np
 from sklearn.utils import check_random_state
 from skopt.space.transformers import Pipeline, Identity, Normalize
+from skopt.sampler.lhs import Lhs
 
 
 def _transpose_list_array(x):
@@ -248,32 +249,36 @@ class TargetSpace(object):
         data -- [num x NParam] array of points
         """
 
-        data = np.empty((num, self.NParam))
+        # Latin Hypercube Sampling
+        lhs_sampler = Lhs()
+        samples = lhs_sampler.generate(self.pbounds, num, random_state=self.RS.randint(0, np.iinfo(np.int32).max))
+        return samples
+        #data = np.empty((num, self.NParam))
 
-        for i in enumerate(data):
-            while True:
-                DD = self.OneRandomPoint(self.NParam, self.pbounds, self.RS)
-                if self.SatisfyConstraints(DD):
-                    data[i[0]] = DD
-                    break
-        return data.tolist()
+        #for i in enumerate(data):
+        #    while True:
+        #        DD = self.OneRandomPoint(self.NParam, self.pbounds, self.RS)
+        #        if self.SatisfyConstraints(DD):
+        #            data[i[0]] = DD
+        #            break
+        #return data.tolist()
 
     # % return one point
-    @staticmethod
-    def OneRandomPoint(NParam, pbounds, RS):
-        x = np.empty(NParam)
-        counter = 0
-        for b in pbounds:
-            if b[0] is None and b[1] is None:
-                x[counter] = RS.normal(size=1)
-            elif b[0] is None:
-                x[counter] = b[1] - RS.exponential(size=1)
-            elif b[1] is None:
-                x[counter] = b[0] + RS.exponential(size=1)
-            else:
-                x[counter] = RS.uniform(low=b[0], high=b[1], size=1)
-            counter += 1
-        return x.tolist()
+    #@staticmethod
+    #def OneRandomPoint(NParam, pbounds, RS):
+    #    x = np.empty(NParam)
+    #    counter = 0
+    #    for b in pbounds:
+    #        if b[0] is None and b[1] is None:
+    #            x[counter] = RS.normal(size=1)
+    #        elif b[0] is None:
+    #            x[counter] = b[1] - RS.exponential(size=1)
+    #        elif b[1] is None:
+    #            x[counter] = b[0] + RS.exponential(size=1)
+    #        else:
+    #            x[counter] = RS.uniform(low=b[0], high=b[1], size=1)
+    #        counter += 1
+    #    return x.tolist()
 
     # % OBSERVE POINT
     def observe_point(self, x):

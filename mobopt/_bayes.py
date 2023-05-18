@@ -171,7 +171,7 @@ class MOBayesianOpt(object):
 
         # Set the default kernel
         if kernel is None:
-            #kernel = Matern(nu=1.5) # TODO: change this regarding scikit-opt cook_estimator
+            #kernel = Matern(nu=1.5)
             # As in scikit-opt we cook a default estimator by multiplying a constant kernel with the Matern 5/2
             cov_amplitude = ConstantKernel(1.0, (0.01, 1000.0)) # means k(x1,x2) = 1.0 value, (0.01, 1000.0) defines the bounds of the constant value for hyperparam tuning
             other_kernel = Matern(
@@ -188,8 +188,7 @@ class MOBayesianOpt(object):
             #self.GP[i] = GPR(kernel=kernel, n_restarts_optimizer=self.n_rest_opt, normalize_y=True)
             self.GP[i] = GPR(kernel=kernel,
                              normalize_y=True,
-                             n_restarts_optimizer=self.n_rest_opt) # TODO: change this regarding scikit-opt cook_estimator
-            # TODO: as in scikit-opt set the seed of the GP
+                             n_restarts_optimizer=self.n_rest_opt)
             self.GP[i].set_params(random_state=rng.randint(0, np.iinfo(np.int32).max))
 
         # store starting points
@@ -201,7 +200,6 @@ class MOBayesianOpt(object):
                 raise ConstraintError(
                     "Equality constraints are not implemented")
 
-        # TODO: space is not normalized
         self.space = TargetSpace(self.target, self.NObj, self.pbounds,
                                  self.constraints,
                                  RandomSeed=self.RandomSeed,
@@ -454,7 +452,6 @@ class MOBayesianOpt(object):
             self.__checkpoint()
 
             # Frequently save results
-            # TODO: save info for plots and follow up of the MOBO process
             #if self.__save_partial:
             #    for NFront in FrontSampling:
             #        if (self.counter % SaveInterval == 0) and \
