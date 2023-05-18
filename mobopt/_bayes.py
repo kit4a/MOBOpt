@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as pl
 import time
 
-# from sklearn.gaussian_process import GaussianProcessRegressor as GPR
+from sklearn.gaussian_process import GaussianProcessRegressor as GPR
 from sklearn.gaussian_process.kernels import Matern, ConstantKernel
 from sklearn.utils import check_random_state
 
@@ -13,7 +13,6 @@ from deap.benchmarks.tools import hypervolume
 from warnings import warn
 from joblib import dump
 
-from ._wrapper import GaussianProcessWrapper as GPR
 from ._NSGA2 import NSGAII
 from .metrics import GD, Spread2D, Coverage
 from ._target_space import TargetSpace
@@ -172,25 +171,24 @@ class MOBayesianOpt(object):
 
         # Set the default kernel
         if kernel is None:
-            kernel = Matern(nu=1.5) # TODO: change this regarding scikit-opt cook_estimator
+            #kernel = Matern(nu=1.5) # TODO: change this regarding scikit-opt cook_estimator
             # As in scikit-opt we cook a default estimator by multiplying a constant kernel with the Matern 5/2
-            #cov_amplitude = ConstantKernel(1.0, (0.01, 1000.0)) # means k(x1,x2) = 1.0 value, (0.01, 1000.0) defines the bounds of the constant value for hyperparam tuning
-            #other_kernel = Matern(
-            #    length_scale=np.ones(self.NParam), # length scales are the hyperparams of the kernel
-            #    length_scale_bounds=[(0.01, 100)] * self.NParam, # bounds for the hyperparam tuning
-            #    nu=2.5 # controls smoothness of the function, 2.5 is an important intermediate value for twice differentiable functions
-            #    )
-            #kernel=cov_amplitude * other_kernel
+            cov_amplitude = ConstantKernel(1.0, (0.01, 1000.0)) # means k(x1,x2) = 1.0 value, (0.01, 1000.0) defines the bounds of the constant value for hyperparam tuning
+            other_kernel = Matern(
+                length_scale=np.ones(self.NParam), # length scales are the hyperparams of the kernel
+                length_scale_bounds=[(0.01, 100)] * self.NParam, # bounds for the hyperparam tuning
+                nu=2.5 # controls smoothness of the function, 2.5 is an important intermediate value for twice differentiable functions
+                )
+            kernel=cov_amplitude * other_kernel
 
         # Init as many estimators as the nb of objectives
         self.GP = [None] * self.NObj
         rng = check_random_state(self.RandomSeed)
         for i in range(self.NObj):
-            self.GP[i] = GPR(kernel=kernel, n_restarts_optimizer=self.n_rest_opt)
-            #self.GP[i] = GPR(kernel=kernel,
-            #                 normalize_y=True,
-            #                 noise="gaussian",
-            #                 n_restarts_optimizer=self.n_rest_opt) # TODO: change this regarding scikit-opt cook_estimator
+            #self.GP[i] = GPR(kernel=kernel, n_restarts_optimizer=self.n_rest_opt, normalize_y=True)
+            self.GP[i] = GPR(kernel=kernel,
+                             normalize_y=True,
+                             n_restarts_optimizer=self.n_rest_opt) # TODO: change this regarding scikit-opt cook_estimator
             # TODO: as in scikit-opt set the seed of the GP
             self.GP[i].set_params(random_state=rng.randint(0, np.iinfo(np.int32).max))
 
@@ -507,80 +505,6 @@ class MOBayesianOpt(object):
             self.space.pbounds) # definition space of x
         dump(checkpoint_obj, self.Filename+f'/checkpoint_iter{self.counter}.pkl', compress=9)
 
-
-    def __PrintOutput(self, front, pop, SaveFile=False):
-
-        NFront = front.shape[0]
-
-        if self.Metrics:
-            GenDist = GD(front, self.TPF)
-            SS = Spread2D(front, self.TPF)
-            HausDist = HD(front, self.TPF)[0]
-        else:
-            GenDist = np.nan
-            SS = np.nan
-            HausDist = np.nan
-
-        Cover = Coverage(front)
-        HV = hypervolume(pop, [11.0]*self.NObj)
-
-        if self.MetricsPS and self.Metrics:
-            FPS = []
-            for x in pop:
-                FF = - self.target(x)
-                FPS += [[FF[i] for i in range(self.NObj)]]
-            FPS = np.array(FPS)
-
-            GDPS = GD(FPS, self.TPF)
-            SSPS = Spread2D(FPS, self.TPF)
-            HDPS = HD(FPS, self.TPF)[0]
-        else:
-            GDPS = np.nan
-            SSPS = np.nan
-            HDPS = np.nan
-
-        self.vprint(f"    NFront = {NFront}, GD = {GenDist:7.3e} |"
-                    f" SS = {SS:7.3e} | HV = {HV:7.3e} ")
-
-        if SaveFile:
-            FrontFilename = f"FF_D{self.NParam:02d}_I{self.counter:04d}_" + \
-                f"NI{self.N_init_points:02d}_P{self.NewProb:4.2f}_" + \
-                f"Q{self.q:4.2f}" + \
-                self.Filename
-
-            PF = np.asarray([np.asarray(y) for y in self.y_Pareto])
-            PS = np.asarray([np.asarray(x) for x in self.x_Pareto])
-
-            Population = np.asarray(pop)
-            np.savez(FrontFilename,
-                     Front=front,
-                     Pop=Population,
-                     PF=PF,
-                     PS=PS)
-
-            FrontFilename += ".npz"
-        else:
-            FrontFilename = np.nan
-
-        self.FF.write("{} {} {} {} {} {} {} {} {} {} {} {} {} {} {}\n"
-                      .format(self.NParam,
-                              self.counter+len(self.init_points),
-                              self.N_init_points,
-                              NFront,
-                              GenDist,
-                              SS,
-                              HV,
-                              HausDist,
-                              Cover,
-                              GDPS,
-                              SSPS,
-                              HDPS,
-                              self.NewProb,
-                              self.q,
-                              FrontFilename))
-
-        return
-
     @staticmethod
     def __MinimalDistance(X, Y):
         N = len(X)
@@ -643,57 +567,6 @@ class MOBayesianOpt(object):
     @staticmethod
     def __Sigmoid(x, k=10.):
         return 1./(1.+np.exp(k*(x-0.5)))
-
-    def WriteSpace(self, filename="space"):
-
-        Info = [self.space.NObj,
-                self.space.NParam,
-                self.space._NObs,
-                self.space.length]
-
-        np.savez(filename,
-                 X=self.space._X,
-                 Y=self.space._Y,
-                 F=self.space._F,
-                 I=Info)        # noqa
-
-        return
-
-    # % read relevant information from file
-
-    def ReadSpace(self, filename="space.npz"):
-
-        Data = np.load(filename)
-
-        self.space.NObj = Data["I"][0]
-        self.space.NParam = Data["I"][1]
-        self.space._NObs = Data["I"][2]
-        self.space.length = Data["I"][3]
-
-        self.space._allocate((self.space.length + 1) * 2)
-
-        self.space._X = Data["X"]
-        self.space._Y = Data["Y"]
-        self.space._F = Data["F"]
-
-        # Redefine GP
-
-        self.GP = [None] * self.NObj
-        for i in range(self.NObj):
-            self.GP[i] = GPR(kernel=Matern(nu=0.5),
-                             n_restarts_optimizer=self.n_rest_opt)
-
-        for i in range(self.NObj):
-            yy = self.space.f[:, i]
-            #self.GP[i].fit(self.space.x, yy)
-            self.GP[i].fit(self.space.normalize(self.space.x), yy)
-
-        self.__CalledInit = True
-        self.N_init_points = self.space._NObs
-
-        self.vprint("Read data from "+filename)
-
-        return
 
 
 class Checkpoint():
