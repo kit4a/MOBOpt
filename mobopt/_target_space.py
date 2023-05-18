@@ -23,6 +23,36 @@ def _transpose_list_array(x):
     return rows
 
 
+def normalize(X, bounds):
+    """
+    Normalize points in X.
+
+    Keyword Arguments:
+    X -- Array of points to normalize
+    bounds -- Definition space of points in X
+
+    Returns:
+    Xt -- Array of normalized points
+    """
+    # Pack by dimension
+    columns = []
+    for dim in range(len(bounds)):
+        columns.append([])
+    for i in range(len(X)):
+        for j in range(len(bounds)):
+            columns[j].append(X[i][j])
+
+    # Normalize
+    for j,bounds in enumerate(bounds):
+        transformer = Pipeline([Identity(), Normalize(bounds[0], bounds[1])])
+        columns[j] = transformer.transform(columns[j])
+
+    # Repack as an array
+    Xt = np.hstack([np.asarray(c).reshape((len(X), -1)) for c in columns])
+
+    return Xt
+
+
 class TargetSpace(object):
     """
     Holds the param-space coordinates (X) and target values (Y)
@@ -158,7 +188,6 @@ class TargetSpace(object):
         Returns:
         Xt -- Array of normalized points
         """
-        return X
         # Pack by dimension
         columns = []
         for dim in range(self.NParam):
@@ -187,8 +216,6 @@ class TargetSpace(object):
         Returns:
         X -- Array of inverse normalized points
         """
-        return Xt
-
         # Proceed one dimension at a time
         columns = []
         Xt = np.asarray(self.NParam)

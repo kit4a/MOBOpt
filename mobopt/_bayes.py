@@ -11,6 +11,7 @@ from sklearn.utils import check_random_state
 from scipy.spatial.distance import directed_hausdorff as HD
 from deap.benchmarks.tools import hypervolume
 from warnings import warn
+from joblib import dump
 
 from ._wrapper import GaussianProcessWrapper as GPR
 from ._NSGA2 import NSGAII
@@ -158,16 +159,16 @@ class MOBayesianOpt(object):
             self.Metrics = True
             self.TPF = TPF
 
-        if self.Filename is not None:
-            self.__save_partial = True
-            self.vprint("Filename = "+self.Filename)
-            self.FF = open(Filename, "a", 1)
-            self.vprint("Saving:")
-            self.vprint("NParam, iter, N init, NFront,"
-                        "GenDist, SS, HV, HausDist, Cover, GDPS, SSPS,"
-                        "HDPS, NewProb, q, FrontFilename")
-        else:
-            self.__save_partial = False
+        #if self.Filename is not None:
+        #    self.__save_partial = True
+        #    self.vprint("Filename = "+self.Filename)
+        #    self.FF = open(Filename, "a", 1)
+        #    self.vprint("Saving:")
+        #    self.vprint("NParam, iter, N init, NFront,"
+        #                "GenDist, SS, HV, HausDist, Cover, GDPS, SSPS,"
+        #                "HDPS, NewProb, q, FrontFilename")
+        #else:
+        #    self.__save_partial = False
 
         # Set the default kernel
         if kernel is None:
@@ -404,6 +405,8 @@ class MOBayesianOpt(object):
                                          )
 
             Population = np.asarray(pop)
+            self.pop = Population
+            self.front = front
             IndexF, FatorF = self.__LargestOfLeast(front, self.space.f)
             # IndexF is the index in front of the point, not really used
             # FatorF is the (d_{l,f} - \mu_f)/ \sigma_f for all l in the estimated Pareto front
@@ -416,15 +419,12 @@ class MOBayesianOpt(object):
             Index_try = np.argmax(Fator)
 
             self.x_try = Population[Index_try]
+            self.y_try = front[Index_try]
 
             self.vprint(f"    Promising next point {self.x_try} (front there = {-front[Index_try]})")
 
-            if self.Picture:
-                plot_1dgp(fig=self.fig, ax=self.ax, space=self.space,
-                          iterations=self.counter+len(self.init_points),
-                          Front=front, last=Index_try)
-
             # Check if next point should be selected randomly
+            self.random_x_try = False
             if self.space.RS.uniform() < self.NewProb:
                 # Select randomly one decision var (compononent of x) that will be changed
                 # to random value within bounds
@@ -436,6 +436,8 @@ class MOBayesianOpt(object):
                 self.x_try[ii] = self.space.RS.uniform(
                     low=self.pbounds[ii][0],
                     high=self.pbounds[ii][1])
+                self.random_x_try = True
+                self.y_try = None
 
                 self.vprint(f"    Modify next point coordinate {ii} by a random value")
 
@@ -449,20 +451,24 @@ class MOBayesianOpt(object):
 
             self.vprint(f"    Nb of points in the current Pareto set = {self.space.ParetoSize:4d}")
 
+
+            # Checkpoint
+            self.__checkpoint()
+
             # Frequently save results
             # TODO: save info for plots and follow up of the MOBO process
-            if self.__save_partial:
-                for NFront in FrontSampling:
-                    if (self.counter % SaveInterval == 0) and \
-                       (NFront == FrontSampling[-1]):
-                        SaveFile = True
-                    else:
-                        SaveFile = False
-                    Ind = self.space.RS.choice(front.shape[0], NFront,
-                                               replace=False)
-                    PopInd = [pop[i] for i in Ind]
-                    self.__PrintOutput(front[Ind, :], PopInd,
-                                       SaveFile)
+            #if self.__save_partial:
+            #    for NFront in FrontSampling:
+            #        if (self.counter % SaveInterval == 0) and \
+            #           (NFront == FrontSampling[-1]):
+            #            SaveFile = True
+            #        else:
+            #            SaveFile = False
+            #        Ind = self.space.RS.choice(front.shape[0], NFront,
+            #                                   replace=False)
+            #        PopInd = [pop[i] for i in Ind]
+            #        self.__PrintOutput(front[Ind, :], PopInd,
+            #                           SaveFile)
 
             self.vprint(f"Iteration done in {time.time() - st} seconds")
 
@@ -486,6 +492,21 @@ class MOBayesianOpt(object):
         Mean = MinDist.mean()
         Std = np.std(MinDist)
         return ArgMax, (MinDist-Mean)/(Std)
+
+    def __checkpoint(self):
+        checkpoint_obj = Checkpoint(self.x_Pareto, # current Pareto set
+            self.y_Pareto, # current Pareto front
+            self.pop, # estimated Pareto set
+            self.front, # estimated Pareto front
+            self.random_x_try, # bool if next point has been chosen randomly
+            self.x_try, # next point to evaluate
+            self.y_try, # fonctions values at next point, None if random x_try
+            self.space.x, # all points at which functions have been evaluated
+            self.space.f, # corresponding functions values
+            self.GP, # metamodels
+            self.space.pbounds) # definition space of x
+        dump(checkpoint_obj, self.Filename+f'/checkpoint_iter{self.counter}.pkl', compress=9)
+
 
     def __PrintOutput(self, front, pop, SaveFile=False):
 
@@ -673,3 +694,18 @@ class MOBayesianOpt(object):
         self.vprint("Read data from "+filename)
 
         return
+
+
+class Checkpoint():
+    def __init__(self, current_PS, current_PF, estim_PS, estim_PF, rd_next_point, next_point, next_point_f, observed_x, observed_f, models, pbounds):
+        self.current_PS = current_PS
+        self.current_PF = current_PF
+        self.estim_PS = estim_PS
+        self.estim_PF = estim_PF
+        self.rd_next_point = rd_next_point
+        self.next_point = next_point
+        self.next_point_f = next_point_f
+        self.models = models
+        self.observed_f = observed_f
+        self.observed_x = observed_x
+        self.pbounds = pbounds
