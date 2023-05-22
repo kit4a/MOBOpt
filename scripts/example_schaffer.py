@@ -12,16 +12,12 @@ SEED = 1234
 
 
 def target(x):
-    return np.asarray(db.zdt1(x))
+    return np.asarray(db.schaffer_mo(x))
 
 
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-d", dest="ND", type=int, metavar="ND",
-                        help="Number of Dimensions for ZDT1",
-                        default=30,
-                        required=False)
     parser.add_argument("-i", dest="NI", type=int, metavar="NI",
                         help="Number of iterations of the method",
                         required=True)
@@ -40,8 +36,8 @@ def main():
     parser.add_argument("-v", dest="verbose", action='store_true',
                         help="Verbose")
     parser.add_argument("--outdir", dest="outdir", type=str,
-                        default="zdt1/",
-                        help="Outdir for saving data")
+                        default="schaffer/",
+                        help="Outpu directory for saving data")
     parser.add_argument("--rprob", dest="Reduce", action="store_true",
                         help="If present reduces prob linearly" +
                         " along simmulation")
@@ -49,7 +45,7 @@ def main():
 
     args = parser.parse_args()
 
-    NParam = args.ND # nb of decision vars
+    NParam = 1 # nb of decision vars
     NIter = args.NI
     if 0 <= args.Prob <= 1.0:
         Prob = args.Prob
@@ -59,7 +55,7 @@ def main():
     verbose = args.verbose
     Q = args.Q
 
-    PB = np.asarray([[0.0, 1.0]]*NParam) # search space dim
+    PB = np.asarray([[-1000.0, 1000.0]]*NParam) # search space dim
 
     Optimize = mo.MOBayesianOpt(target=target,
                                 NObj=2,
@@ -88,7 +84,7 @@ def main():
     ax.set_xlabel(r'$f_1$')
     ax.set_ylabel(r'$f_2$')
     ax.legend()
-    fig.savefig(args.outdir+".png", dpi=300)
+    fig.savefig(args.outdir+f"final_{SEED}.png", dpi=300)
 
 
 if __name__ == '__main__':
