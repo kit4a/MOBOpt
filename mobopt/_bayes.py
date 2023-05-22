@@ -3,6 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as pl
 import time
+import warnings
 
 from sklearn.gaussian_process import GaussianProcessRegressor as GPR
 from sklearn.gaussian_process.kernels import Matern, ConstantKernel
@@ -16,7 +17,6 @@ from joblib import dump
 from ._NSGA2 import NSGAII
 from .metrics import GD, Spread2D, Coverage
 from ._target_space import TargetSpace
-from ._helpers import plot_1dgp
 
 
 class ConstraintError(Exception):
@@ -41,7 +41,7 @@ class MOBayesianOpt(object):
     def __init__(self, target, NObj, pbounds, constraints=[],
                  verbose=False, Picture=False, TPF=None,
                  n_restarts_optimizer=10, Filename=None,
-                 MetricsPS=True, max_or_min='max', RandomSeed=None,
+                 max_or_min='max', RandomSeed=None,
                  kernel=None):
         """Bayesian optimization object
 
@@ -79,9 +79,6 @@ class MOBayesianOpt(object):
              Partial metrics will be
              saved at filename, if None nothing is saved
 
-        MetricsPS -- bool (default True)
-             whether os not to calculate metrics with the Pareto Set points
-
         max_or_min -- str (default 'max')
              whether the optimization problem is a maximization
              problem ('max'), or a minimization one ('min')
@@ -114,7 +111,6 @@ class MOBayesianOpt(object):
         self.constraints = constraints
         self.n_rest_opt = n_restarts_optimizer
         self.Filename = Filename
-        self.MetricsPS = MetricsPS
         self.RandomSeed = RandomSeed
 
         # reset calling variables
@@ -282,8 +278,8 @@ class MOBayesianOpt(object):
                  ReduceProb=False,
                  q=0.5,
                  n_pts=100,
-                 SaveInterval=10,
-                 FrontSampling=[10, 25, 50, 100]):
+                 nsga_ngen=100,
+                 nsga_cxpb=0.9):
         """
         maximize
 
@@ -309,12 +305,12 @@ class MOBayesianOpt(object):
             effective size of the pareto front
             (len(front = n_pts))
 
-        SaveInterval -- int
-            at every SaveInterval save a npz file with the full pareto front at
-            that iteration
+        nsga_ngen --int
+            number of generations to go through in the NSGAII algorithm
 
-        FrontSampling -- list of ints
-             Number of points to sample the pareto front for metrics
+        nsga_cxpb -- float ( 0 < nsga_cxpb < 1.0)
+            probability of cross over in the NSGAII algorithm
+
 
         return front, pop
         =================
@@ -342,16 +338,6 @@ class MOBayesianOpt(object):
             raise TypeError(f"n_pts should be int, "
                             f"{type(n_pts)} instead")
 
-        if not isinstance(SaveInterval, int):
-            raise TypeError(f"SaveInterval should be int, "
-                            f"{type(SaveInterval)} instead")
-
-        if isinstance(FrontSampling, list):
-            if not all([isinstance(n, int) for n in FrontSampling]):
-                raise TypeError(f"FrontSampling should be list of int")
-        else:
-            raise TypeError(f"FrontSampling should be a list")
-
         if not isinstance(prob, (int, float)):
             raise TypeError(f"prob should be float, "
                             f"{type(prob)} instead")
@@ -363,6 +349,13 @@ class MOBayesianOpt(object):
         if not isinstance(ReduceProb, bool):
             raise TypeError(f"ReduceProb should be bool, "
                             f"{type(ReduceProb)} instead")
+
+        if not isinstance(nsga_ngen, int):
+            raise TypeError(f"nsga_ngen should be int, "
+                            f"{type(nsga_ngen)} instead")
+
+        if not isinstance(nsga_cxpb, float) or nsga_cxpb < 0 or nsga_cxpb > 1:
+            raise TypeError(f"Review nsga_cxpb parameter as a float within [0,1]")
 
         # Allocate necessary space
         if self.N_init_points+n_iter > self.space._n_alloc_rows:
@@ -386,7 +379,9 @@ class MOBayesianOpt(object):
             for i in range(self.NObj):
                 yy = self.space.f[:, i] # all obj func i values for the observed points
                 #self.GP[i].fit(self.space.x, yy) # update the GP
-                self.GP[i].fit(self.space.normalize(self.space.x), yy) # update the GP
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    self.GP[i].fit(self.space.normalize(self.space.x), yy) # update the GP
 
             # Compute the estimated Pareto Front based on estimators and NSGA-II
             # pop is the final pop found, it is the estimated Pareto set, front is
@@ -396,8 +391,8 @@ class MOBayesianOpt(object):
                                          self.pbounds,
                                          MU=n_pts, # effective size of the Pareto Front
                                          seed=self.RandomSeed,
-                                         NGEN=100,
-                                         CXPB=0.9
+                                         NGEN=nsga_ngen,
+                                         CXPB=nsga_cxpb
                                          )
 
             Population = np.asarray(pop)
@@ -451,19 +446,6 @@ class MOBayesianOpt(object):
             # Checkpoint
             self.__checkpoint()
 
-            # Frequently save results
-            #if self.__save_partial:
-            #    for NFront in FrontSampling:
-            #        if (self.counter % SaveInterval == 0) and \
-            #           (NFront == FrontSampling[-1]):
-            #            SaveFile = True
-            #        else:
-            #            SaveFile = False
-            #        Ind = self.space.RS.choice(front.shape[0], NFront,
-            #                                   replace=False)
-            #        PopInd = [pop[i] for i in Ind]
-            #        self.__PrintOutput(front[Ind, :], PopInd,
-            #                           SaveFile)
 
             self.vprint(f"Iteration done in {time.time() - st} seconds")
 
