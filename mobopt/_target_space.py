@@ -417,37 +417,3 @@ class TargetSpace(object):
         self._F = _Fnew
 
         return
-
-    # % write relevant information to file
-    def WriteSpace(self, filename="space"):
-
-        Info = [self.NObj,
-                self.NParam,
-                self._NObs,
-                self.length]
-
-        np.savez(filename,
-                 X=self._X,
-                 Y=self._Y,
-                 F=self._F,
-                 I=Info)        # noqa
-
-        return
-
-    # % read relevant information from file
-    def ReadSpace(self, filename="space"):
-
-        Data = np.load(filename)
-
-        self.NObj = Data["I"][0]
-        self.NParam = Data["I"][1]
-        self._NObs = Data["I"][2]
-        self.length = Data["I"][3]
-
-        self._allocate((self.length + 1) * 2)
-
-        self._X = Data["X"]
-        self._Y = Data["Y"]
-        self._F = Data["F"]
-
-        return

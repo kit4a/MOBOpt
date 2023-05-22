@@ -40,7 +40,7 @@ class MOBayesianOpt(object):
 
     def __init__(self, target, NObj, pbounds, constraints=[],
                  verbose=False, Picture=False, TPF=None,
-                 n_restarts_optimizer=10, Filename=None,
+                 n_restarts_optimizer=10, outdir=None,
                  max_or_min='max', RandomSeed=None,
                  kernel=None):
         """Bayesian optimization object
@@ -75,9 +75,8 @@ class MOBayesianOpt(object):
              finding the kernel’s parameters which maximize the log-marginal
              likelihood.
 
-        Filename -- string (default None)
-             Partial metrics will be
-             saved at filename, if None nothing is saved
+        outdir -- string (default None)
+             Checkpoints will be saved in outdir, if None nothing is saved
 
         max_or_min -- str (default 'max')
              whether the optimization problem is a maximization
@@ -110,7 +109,7 @@ class MOBayesianOpt(object):
         self.counter = 0 # iteration counter
         self.constraints = constraints
         self.n_rest_opt = n_restarts_optimizer
-        self.Filename = Filename
+        self.outdir = outdir
         self.RandomSeed = RandomSeed
 
         # reset calling variables
@@ -153,17 +152,6 @@ class MOBayesianOpt(object):
             self.vprint("metrics are going to be saved")
             self.Metrics = True
             self.TPF = TPF
-
-        #if self.Filename is not None:
-        #    self.__save_partial = True
-        #    self.vprint("Filename = "+self.Filename)
-        #    self.FF = open(Filename, "a", 1)
-        #    self.vprint("Saving:")
-        #    self.vprint("NParam, iter, N init, NFront,"
-        #                "GenDist, SS, HV, HausDist, Cover, GDPS, SSPS,"
-        #                "HDPS, NewProb, q, FrontFilename")
-        #else:
-        #    self.__save_partial = False
 
         # Set the default kernel
         if kernel is None:
@@ -471,18 +459,19 @@ class MOBayesianOpt(object):
         return ArgMax, (MinDist-Mean)/(Std)
 
     def __checkpoint(self):
-        checkpoint_obj = Checkpoint(self.x_Pareto, # current Pareto set
-            self.y_Pareto, # current Pareto front
-            self.pop, # estimated Pareto set
-            self.front, # estimated Pareto front
-            self.random_x_try, # bool if next point has been chosen randomly
-            self.x_try, # next point to evaluate
-            self.y_try, # fonctions values at next point, None if random x_try
-            self.space.x, # all points at which functions have been evaluated
-            self.space.f, # corresponding functions values
-            self.GP, # metamodels
-            self.space.pbounds) # definition space of x
-        dump(checkpoint_obj, self.Filename+f'/checkpoint_iter{self.counter}.pkl', compress=9)
+        if self.outdir is not None:
+            checkpoint_obj = Checkpoint(self.x_Pareto, # current Pareto set
+                self.y_Pareto, # current Pareto front
+                self.pop, # estimated Pareto set
+                self.front, # estimated Pareto front
+                self.random_x_try, # bool if next point has been chosen randomly
+                self.x_try, # next point to evaluate
+                self.y_try, # fonctions values at next point, None if random x_try
+                self.space.x, # all points at which functions have been evaluated
+                self.space.f, # corresponding functions values
+                self.GP, # metamodels
+                self.space.pbounds) # definition space of x
+            dump(checkpoint_obj, self.outdir+f'/checkpoint_iter{self.counter}.pkl', compress=9)
 
     @staticmethod
     def __MinimalDistance(X, Y):
