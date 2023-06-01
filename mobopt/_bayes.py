@@ -5,7 +5,9 @@ import matplotlib.pyplot as pl
 import time
 import warnings
 
-from sklearn.gaussian_process import GaussianProcessRegressor as GPR
+#from skopt.learning import GaussianProcessRegressor as GPR
+#from skopt.utils import cook_estimator
+from skopt import gp_minimize
 from sklearn.gaussian_process.kernels import Matern, ConstantKernel
 from sklearn.utils import check_random_state
 
@@ -129,6 +131,7 @@ class MOBayesianOpt(object):
             self.Picture = False
 
         # objective function returns lists w/ the multiple target functions
+        self.max_or_min = max_or_min
         if callable(target):
             self.target = max_or_min_wrapper(target, max_or_min)
         else:
@@ -154,26 +157,27 @@ class MOBayesianOpt(object):
             self.TPF = TPF
 
         # Set the default kernel
-        if kernel is None:
+        #if kernel is None:
             #kernel = Matern(nu=1.5)
             # As in scikit-opt we cook a default estimator by multiplying a constant kernel with the Matern 5/2
-            cov_amplitude = ConstantKernel(1.0, (0.01, 1000.0)) # means k(x1,x2) = 1.0 value, (0.01, 1000.0) defines the bounds of the constant value for hyperparam tuning
-            other_kernel = Matern(
-                length_scale=np.ones(self.NParam), # length scales are the hyperparams of the kernel
-                length_scale_bounds=[(0.01, 100)] * self.NParam, # bounds for the hyperparam tuning
-                nu=2.5 # controls smoothness of the function, 2.5 is an important intermediate value for twice differentiable functions
-                )
-            kernel=cov_amplitude * other_kernel
+            #cov_amplitude = ConstantKernel(1.0, (0.01, 1000.0)) # means k(x1,x2) = 1.0 value, (0.01, 1000.0) defines the bounds of the constant value for hyperparam tuning
+            #other_kernel = Matern(
+            #    length_scale=np.ones(self.NParam), # length scales are the hyperparams of the kernel
+            #    length_scale_bounds=[(0.01, 100)] * self.NParam, # bounds for the hyperparam tuning
+            #    nu=2.5 # controls smoothness of the function, 2.5 is an important intermediate value for twice differentiable functions
+            #    )
+            #kernel=cov_amplitude * other_kernel
 
         # Init as many estimators as the nb of objectives
         self.GP = [None] * self.NObj
-        rng = check_random_state(self.RandomSeed)
-        for i in range(self.NObj):
-            #self.GP[i] = GPR(kernel=kernel, n_restarts_optimizer=self.n_rest_opt, normalize_y=True)
-            self.GP[i] = GPR(kernel=kernel,
-                             normalize_y=True,
-                             n_restarts_optimizer=self.n_rest_opt)
-            self.GP[i].set_params(random_state=rng.randint(0, np.iinfo(np.int32).max))
+        #self.rng = check_random_state(self.RandomSeed)
+        #for i in range(self.NObj):
+            #self.GP[i] = cook_estimator('GP', space=self.pbounds, random_state=self.rng.randint(0, np.iinfo(np.int32).max))
+            #self.GP[i] = GPR(kernel=kernel,
+            #                 normalize_y=True,
+            #                 n_restarts_optimizer=2,
+            #                 noise='gaussian')
+            #self.GP[i].set_params(random_state=rng.randint(0, np.iinfo(np.int32).max))
 
         # store starting points
         self.init_points = []
@@ -253,7 +257,34 @@ class MOBayesianOpt(object):
             raise RuntimeError(
                 "A non-zero number of initialization points is required")
 
+        # Update estimators on observations
+        for i in range(self.NObj):
+            yy = list(self.space.f[:, i]) # all obj func i values for the observed points
+            #with warnings.catch_warnings():
+            #    warnings.simplefilter("ignore")
+            #    self.GP[i].fit(self.space.normalize(self.space.x), yy) # update the GP
+            x0 = [list(x0_) for x0_ in self.space.x]
+            y0 = yy
+            res_skopt = gp_minimize(lambda x: None,
+                  self.pbounds,
+                  n_calls=0,
+                  n_initial_points=0,
+                  x0=x0,
+                  y0=y0,
+                  random_state=self.RandomSeed)
+            self.GP[i] = res_skopt.models[-1]
+
         self.__CalledInit = True
+
+
+        self.x_Pareto = None
+        self.y_Pareto = None
+        self.pop = None
+        self.front = None
+        self.random_x_try = None
+        self.x_try = None
+        self.y_try = None
+        self.__checkpoint()
 
         self.vprint(f"Initialization done in {time.time() - st} seconds")
 
@@ -366,7 +397,6 @@ class MOBayesianOpt(object):
             # Update estimators on observations
             for i in range(self.NObj):
                 yy = self.space.f[:, i] # all obj func i values for the observed points
-                #self.GP[i].fit(self.space.x, yy) # update the GP
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
                     self.GP[i].fit(self.space.normalize(self.space.x), yy) # update the GP
@@ -526,7 +556,6 @@ class MOBayesianOpt(object):
                     Constraints -= y
 
         for i in range(self.NObj):
-            #F[i] = -self.GP[i].predict(xx)[0] + Fator * Constraints
             F[i] = -self.GP[i].predict(self.space.normalize(xx))[0] + Fator * Constraints
 
         return F
