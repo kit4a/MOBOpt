@@ -264,13 +264,12 @@ class MOBayesianOpt(object):
             #    warnings.simplefilter("ignore")
             #    self.GP[i].fit(self.space.normalize(self.space.x), yy) # update the GP
             x0 = [list(x0_) for x0_ in self.space.x]
-            y0 = yy
             res_skopt = gp_minimize(lambda x: None,
                   self.pbounds,
                   n_calls=0,
                   n_initial_points=0,
                   x0=x0,
-                  y0=y0,
+                  y0=yy,
                   random_state=self.RandomSeed)
             self.GP[i] = res_skopt.models[-1]
 
@@ -394,16 +393,28 @@ class MOBayesianOpt(object):
                 self.NewProb = prob * (1.0 - self.counter/n_iter)
             self.vprint(f"---> Iteration {i}/{n_iter} (r = {self.NewProb:4.2f})")
 
-            # Update estimators on observations
-            for i in range(self.NObj):
-                yy = self.space.f[:, i] # all obj func i values for the observed points
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    self.GP[i].fit(self.space.normalize(self.space.x), yy) # update the GP
+            # Update estimators on observations (not required for the first iter as fit is done in the initialize method)
+            if i > 0:
+                #st_fit = time.time()
+                #self.vprint(f"     Fit models on {len(self.space.x)} observations with {self.GP[0].n_restarts_optimizer} restarts of optimizer...")
+                for j in range(self.NObj):
+                    x0 = [list(x0_) for x0_ in self.space.x]
+                    yy = self.space.f[:, j] # all obj func j values for the observed points
+                    res_skopt = gp_minimize(lambda x: None,
+                        self.pbounds,
+                        n_calls=0,
+                        n_initial_points=0,
+                        x0=x0,
+                        y0=yy,
+                        random_state=self.RandomSeed)
+                    self.GP[j] = res_skopt.models[-1]
+                #self.vprint(f"     ____Fit of all obj done in {time.time() - st_fit}")
 
             # Compute the estimated Pareto Front based on estimators and NSGA-II
             # pop is the final pop found, it is the estimated Pareto set, front is
             # the estimated Pareto Front, logbook contains info about the evol process
+            #st_nsgaii = time.time()
+            #self.vprint(f"     Launch NSGAII...")
             pop, logbook, front = NSGAII(self.NObj,
                                          self.__ObjectiveGP, # estimated target function
                                          self.pbounds,
@@ -412,7 +423,10 @@ class MOBayesianOpt(object):
                                          NGEN=nsga_ngen,
                                          CXPB=nsga_cxpb
                                          )
+            #self.vprint(f"     ____NSGAII done in {time.time() - st_nsgaii}")
 
+            #st_nextp = time.time()
+            #self.vprint(f"     Compute next point...")
             Population = np.asarray(pop)
             self.pop = Population
             self.front = front
@@ -449,11 +463,18 @@ class MOBayesianOpt(object):
                 self.y_try = None
 
                 self.vprint(f"    Modify next point coordinate {ii} by a random value")
+            #self.vprint(f"     ____Next point found in {time.time() - st_nextp}")
 
+            #st_obs = time.time()
+            #self.vprint(f"     Observe new point...")
             dummy = self.space.observe_point(self.x_try)  # noqa
+            #self.vprint(f"    ____Observation done in {time.time() - st_obs}")
 
             # Get current Pareto set and front
+            #st_par = time.time()
+            #self.vprint(f"     Compute Pareto set...")
             self.y_Pareto, self.x_Pareto = self.space.ParetoSet()
+            #self.vprint(f"    ____Pareto set computed in {time.time() - st_par}")
 
             # Update iteration counter
             self.counter += 1
@@ -462,10 +483,12 @@ class MOBayesianOpt(object):
 
 
             # Checkpoint
+            #st_ckp = time.time()
+            #self.vprint(f"     Checkpoint...")
             self.__checkpoint()
+            #self.vprint(f"    ____Checkpoint done in {time.time() - st_par}")
 
-
-            self.vprint(f"Iteration done in {time.time() - st} seconds")
+            self.vprint(f"____Iteration done in {time.time() - st} seconds")
 
         return front, np.asarray(pop)
 
