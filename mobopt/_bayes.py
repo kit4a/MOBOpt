@@ -36,6 +36,13 @@ def max_or_min_wrapper(function, max_or_min):
         raise ValueError("max_or_min should be either 'max' or 'min'")
     return fun_wrapper
 
+def max_or_min_wrapper_scalar(y, max_or_min):
+    if max_or_min == 'max':
+        return y
+    elif max_or_min == 'min':
+        return -y
+    else:
+        raise ValueError("max_or_min should be either 'max' or 'min'")
 
 # Class Bayesians Optimization
 class MOBayesianOpt(object):
@@ -250,6 +257,8 @@ class MOBayesianOpt(object):
             else:
                 self.vprint(f"Take into account {len(Points)} points and associated obj funcs values speicified by user ({Points})")
                 for x, y in zip(Points, Y):
+                    # Wrap Y
+                    y = max_or_min_wrapper_scalar(y, self.max_or_min)
                     self.space.add_observation(np.array(x), np.array(y))
                     self.N_init_points += 1
 
