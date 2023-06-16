@@ -49,7 +49,7 @@ class MOBayesianOpt(object):
 
     def __init__(self, target, NObj, pbounds, constraints=[],
                  verbose=False, Picture=False, TPF=None,
-                 n_restarts_optimizer=10, outdir=None,
+                 outdir=None,
                  max_or_min='max', RandomSeed=None,
                  kernel=None):
         """Bayesian optimization object
@@ -78,11 +78,6 @@ class MOBayesianOpt(object):
         TPF -- np.ndarray (default None)
                Array with the True Pareto Front for calculation of
                convergence metrics
-
-        n_restarts_optimizer -- int (default 10)
-             GP parameter, the number of restarts of the optimizer for
-             finding the kernel’s parameters which maximize the log-marginal
-             likelihood.
 
         outdir -- string (default None)
              Checkpoints will be saved in outdir, if None nothing is saved
@@ -117,7 +112,6 @@ class MOBayesianOpt(object):
 
         self.counter = 0 # iteration counter
         self.constraints = constraints
-        self.n_rest_opt = n_restarts_optimizer
         self.outdir = outdir
         self.RandomSeed = RandomSeed
 
@@ -405,7 +399,7 @@ class MOBayesianOpt(object):
             # Update estimators on observations (not required for the first iter as fit is done in the initialize method)
             if i > 0:
                 #st_fit = time.time()
-                #self.vprint(f"     Fit models on {len(self.space.x)} observations with {self.GP[0].n_restarts_optimizer} restarts of optimizer...")
+                #self.vprint(f"     Fit models on {len(self.space.x)} observations ...")
                 for j in range(self.NObj):
                     x0 = [list(x0_) for x0_ in self.space.x]
                     yy = self.space.f[:, j] # all obj func j values for the observed points

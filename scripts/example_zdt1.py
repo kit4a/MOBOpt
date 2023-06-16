@@ -34,9 +34,6 @@ def main():
     parser.add_argument("-ni", dest="NInit", type=int, metavar="NInit",
                         help="Number of initialization points",
                         required=False, default=5)
-    parser.add_argument("-nr", dest="NRest", type=int, metavar="N Restarts",
-                        help="Number of restarts of GP optimizer",
-                        required=False, default=100)
     parser.add_argument("-v", dest="verbose", action='store_true',
                         help="Verbose")
     parser.add_argument("--outdir", dest="outdir", type=str,
@@ -65,7 +62,6 @@ def main():
                                 NObj=2,
                                 pbounds=PB,
                                 verbose=verbose,
-                                n_restarts_optimizer=args.NRest,
                                 outdir=args.outdir,
                                 max_or_min='min',
                                 RandomSeed=SEED)
