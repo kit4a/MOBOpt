@@ -238,6 +238,7 @@ class MOBayesianOpt(object):
             self.init_points = np.asarray(self.init_points)
 
             # evaluate target function at all intialization points
+            self.vprint(f"Random points sampled with lhs = {self.init_points.tolist()}")
             for x in self.init_points:
                 self.vprint(f"---> Launch evaluation at x={x}")
                 self.space.observe_point(x)
