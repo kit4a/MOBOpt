@@ -51,7 +51,8 @@ class MOBayesianOpt(object):
                  verbose=False, Picture=False, TPF=None,
                  outdir=None,
                  max_or_min='max', RandomSeed=None,
-                 kernel=None):
+                 kernel=None,
+                 noise='gaussian'):
         """Bayesian optimization object
 
         Keyword Arguments:
@@ -100,6 +101,9 @@ class MOBayesianOpt(object):
 
             For valid kernel objects, visit:
             https://scikit-learn.org/stable/modules/gaussian_process.html#kernels-for-gaussian-processes)
+
+        noise -- Noise considered for all objective functions to fit GPs, by default
+             Gaussian noise is considered.
 
         Based heavily on github.com/fmfn/BayesianOptimization
 
@@ -171,6 +175,7 @@ class MOBayesianOpt(object):
 
         # Init as many estimators as the nb of objectives
         self.GP = [None] * self.NObj
+        self.noise = noise
         #self.rng = check_random_state(self.RandomSeed)
         #for i in range(self.NObj):
             #self.GP[i] = cook_estimator('GP', space=self.pbounds, random_state=self.rng.randint(0, np.iinfo(np.int32).max))
@@ -274,7 +279,8 @@ class MOBayesianOpt(object):
                   n_initial_points=0,
                   x0=x0,
                   y0=yy,
-                  random_state=self.RandomSeed)
+                  random_state=self.RandomSeed,
+                  noise=self.noise)
             self.GP[i] = res_skopt.models[-1]
 
         self.__CalledInit = True
@@ -410,7 +416,8 @@ class MOBayesianOpt(object):
                         n_initial_points=0,
                         x0=x0,
                         y0=yy,
-                        random_state=self.RandomSeed)
+                        random_state=self.RandomSeed,
+                        noise=self.noise)
                     self.GP[j] = res_skopt.models[-1]
                 #self.vprint(f"     ____Fit of all obj done in {time.time() - st_fit}")
 
@@ -606,3 +613,17 @@ class Checkpoint():
         self.observed_f = observed_f
         self.observed_x = observed_x
         self.pbounds = pbounds
+
+    def copy(self):
+        current_PS = self.current_PS.copy()
+        current_PF = self.current_PF.copy()
+        estim_PS = self.estim_PS.copy()
+        estim_PF = self.estim_PF.copy()
+        rd_next_point = self.rd_next_point
+        next_point = self.next_point.copy()
+        next_point_f = self.next_point_f.copy()
+        models = self.models.copy()
+        observed_f = self.observed_f.copy()
+        observed_x = self.observed_x.copy()
+        pbounds = self.pbounds.copy()
+        return Checkpoint(current_PS, current_PF, estim_PS, estim_PF, rd_next_point, next_point, next_point_f, observed_x, observed_f, models, pbounds)
