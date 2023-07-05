@@ -461,19 +461,33 @@ class MOBayesianOpt(object):
             self.random_x_try = False
             if self.space.RS.uniform() < self.NewProb:
                 # Select randomly one decision var (compononent of x) that will be changed
-                # to random value within bounds
                 if self.NParam > 1:
-                    ii = self.space.RS.randint(low=0, high=self.NParam - 1)
+                    ii = self.space.RS.randint(low=0, high=self.NParam)
                 else:
                     ii = 0
 
+                # Change to random value within bounds
                 self.x_try[ii] = self.space.RS.uniform(
                     low=self.pbounds[ii][0],
                     high=self.pbounds[ii][1])
+                # Change to value where sum of normalized stds of all obj funcs is max
+                #possible_values = np.linspace(self.pbounds[ii][0], self.pbounds[ii][1], n_pts)
+                #possible_x_try = [self.x_try.copy() for i in range(n_pts)]
+                #for poss_x_try,compval in zip(possible_x_try, possible_values):
+                #    poss_x_try[ii] = compval
+                #sum_normalized_stds = [0]*n_pts
+                #for j in range(self.NObj):
+                #    _, stds = self.GP[j].predict(self.space.normalize(possible_x_try), return_std=True)
+                #    normalized_stds = (stds-min(stds)) / (max(stds)-min(stds))
+                #    for k in range(n_pts):
+                #        sum_normalized_stds[k] += normalized_stds[k]
+                #selected_idx = sum_normalized_stds.index(max(sum_normalized_stds))
+                #self.x_try[ii] = possible_values[selected_idx]
+
                 self.random_x_try = True
                 self.y_try = None
 
-                self.vprint(f"    Modify next point coordinate {ii} by a random value")
+                self.vprint(f"    Modify next point coordinate {ii}")
             #self.vprint(f"     ____Next point found in {time.time() - st_nextp}")
 
             #st_obs = time.time()
