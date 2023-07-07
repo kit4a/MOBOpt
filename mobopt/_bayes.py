@@ -258,7 +258,7 @@ class MOBayesianOpt(object):
                 self.vprint(f"Take into account {len(Points)} points and associated obj funcs values speicified by user ({Points})")
                 for x, y in zip(Points, Y):
                     # Wrap Y
-                    y = max_or_min_wrapper_scalar(y, self.max_or_min)
+                    y = max_or_min_wrapper_scalar(np.array(y), self.max_or_min)
                     self.space.add_observation(np.array(x), np.array(y))
                     self.N_init_points += 1
 
@@ -449,6 +449,8 @@ class MOBayesianOpt(object):
             # same for Pareto set
 
             # Select one point based on a mix of both Pareto set and front indicators
+            #self.vprint(f"    -> FatorF = {FatorF}")
+            #self.vprint(f"    -> FatorPop = {FatorPop}")
             Fator = self.q * FatorF + (1-self.q) * FatorPop
             Index_try = np.argmax(Fator)
 
@@ -467,22 +469,22 @@ class MOBayesianOpt(object):
                     ii = 0
 
                 # Change to random value within bounds
-                self.x_try[ii] = self.space.RS.uniform(
-                    low=self.pbounds[ii][0],
-                    high=self.pbounds[ii][1])
+                #self.x_try[ii] = self.space.RS.uniform(
+                #    low=self.pbounds[ii][0],
+                #    high=self.pbounds[ii][1])
                 # Change to value where sum of normalized stds of all obj funcs is max
-                #possible_values = np.linspace(self.pbounds[ii][0], self.pbounds[ii][1], n_pts)
-                #possible_x_try = [self.x_try.copy() for i in range(n_pts)]
-                #for poss_x_try,compval in zip(possible_x_try, possible_values):
-                #    poss_x_try[ii] = compval
-                #sum_normalized_stds = [0]*n_pts
-                #for j in range(self.NObj):
-                #    _, stds = self.GP[j].predict(self.space.normalize(possible_x_try), return_std=True)
-                #    normalized_stds = (stds-min(stds)) / (max(stds)-min(stds))
-                #    for k in range(n_pts):
-                #        sum_normalized_stds[k] += normalized_stds[k]
-                #selected_idx = sum_normalized_stds.index(max(sum_normalized_stds))
-                #self.x_try[ii] = possible_values[selected_idx]
+                possible_values = np.linspace(self.pbounds[ii][0], self.pbounds[ii][1], n_pts)
+                possible_x_try = [self.x_try.copy() for i in range(n_pts)]
+                for poss_x_try,compval in zip(possible_x_try, possible_values):
+                    poss_x_try[ii] = compval
+                sum_normalized_stds = [0]*n_pts
+                for j in range(self.NObj):
+                    _, stds = self.GP[j].predict(self.space.normalize(possible_x_try), return_std=True)
+                    normalized_stds = (stds-min(stds)) / (max(stds)-min(stds))
+                    for k in range(n_pts):
+                        sum_normalized_stds[k] += normalized_stds[k]
+                selected_idx = sum_normalized_stds.index(max(sum_normalized_stds))
+                self.x_try[ii] = possible_values[selected_idx]
 
                 self.random_x_try = True
                 self.y_try = None
@@ -527,8 +529,10 @@ class MOBayesianOpt(object):
         """
         NF = len(front)
         MinDist = np.empty(NF)
+        normbounds = [(min(min(front[:,iobj]), min(F[:,iobj])),max(max(front[:,iobj]), max(F[:,iobj]))) for iobj in range(self.NObj)]
         for i in range(NF):
-            MinDist[i] = self.__MinimalDistance(-front[i], F) # min dist between point i of front and all points in F
+            MinDist[i] = self.__MinimalDistanceNorm(-front[i], F, normbounds) # to prevent one dim with wider range values overweight in the distance
+            #MinDist[i] = self.__MinimalDistance(-front[i], F) # min dist between point i of front and all points in F
 
         ArgMax = np.argmax(MinDist) # select the point in front that is the farthest away from all previously observed points
 
@@ -550,6 +554,22 @@ class MOBayesianOpt(object):
                 self.GP, # metamodels
                 self.space.pbounds) # definition space of x
             dump(checkpoint_obj, self.outdir+f'/checkpoint_iter{self.counter}.pkl', compress=9)
+
+    @staticmethod
+    def __MinimalDistanceNorm(X, Y, normbounds):
+        N = len(X)
+        Npts = len(Y)
+        DistMin = float('inf')
+        for i in range(Npts):
+            Dist = 0.
+            for j in range(N):
+                normXj = (X[j]-normbounds[j][0])/(normbounds[j][1] - normbounds[j][0])
+                normYij = (Y[i, j] - normbounds[j][0])/(normbounds[j][1] - normbounds[j][0])
+                Dist += (normXj - normYij)**2
+            Dist = np.sqrt(Dist)
+            if Dist < DistMin:
+                DistMin = Dist
+        return DistMin
 
     @staticmethod
     def __MinimalDistance(X, Y):
