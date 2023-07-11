@@ -561,7 +561,7 @@ class MOBayesianOpt(object):
         """
         NF = len(front)
         MinDist = np.empty(NF)
-        normbounds = [(min(min(front[:,iobj]), min(F[:,iobj])),max(max(front[:,iobj]), max(F[:,iobj]))) for iobj in range(self.NObj)]
+        normbounds = [(min(min(front[:,i]), min(F[:,i])),max(max(front[:,i]), max(F[:,i]))) for i in range(len(front[0]))]
         for i in range(NF):
             MinDist[i] = self.__MinimalDistanceNorm(-front[i], F, normbounds) # to prevent one dim with wider range values overweight in the distance
             #MinDist[i] = self.__MinimalDistance(-front[i], F) # min dist between point i of front and all points in F
