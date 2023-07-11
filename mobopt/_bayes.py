@@ -52,7 +52,9 @@ class MOBayesianOpt(object):
                  outdir=None,
                  max_or_min='max', RandomSeed=None,
                  kernel=None,
-                 noise='gaussian'):
+                 noise='gaussian',
+                 obj_upper_bounds=None,
+                 upc_penalty=None):
         """Bayesian optimization object
 
         Keyword Arguments:
@@ -105,6 +107,12 @@ class MOBayesianOpt(object):
         noise -- Noise considered for all objective functions to fit GPs, by default
              Gaussian noise is considered.
 
+        obj_upper_bounds -- Upper bounds contraints for each objective to orient
+             the search
+
+        upc_penalty -- Penalty to be applied in NSGA obj func when the upper bounds
+             contraints on the objectives are not verified
+
         Based heavily on github.com/fmfn/BayesianOptimization
 
         """
@@ -116,6 +124,8 @@ class MOBayesianOpt(object):
 
         self.counter = 0 # iteration counter
         self.constraints = constraints
+        self.obj_upper_bounds = obj_upper_bounds
+        self.upc_penalty = upc_penalty
         self.outdir = outdir
         self.RandomSeed = RandomSeed
 
@@ -127,6 +137,12 @@ class MOBayesianOpt(object):
             self.NObj = NObj
         else:
             raise TypeError("NObj should be int")
+
+        if self.obj_upper_bounds is not None:
+            if self.upc_penalty is None:
+                raise ValueError("Upper bound constraint penalty should be defined when upper bounds are")
+            if len(self.obj_upper_bounds) != self.NObj:
+                raise ValueError("Upper bounds should be defined for all objectives")
 
         if Picture and self.NObj == 2:
             self.Picture = Picture
@@ -436,6 +452,22 @@ class MOBayesianOpt(object):
                                          )
             #self.vprint(f"     ____NSGAII done in {time.time() - st_nsgaii}")
 
+            #if self.obj_upper_bounds is not None:
+            #    # Filter the front and pop by contraints
+            #    pop_below = np.array(pop)
+            #    front_below = np.array(front)
+            #    for j in range(self.NObj):
+            #        mask = (front_below[:,j] < self.obj_upper_bounds[j])
+            #        front_below = front_below[mask]
+            #        pop_below = pop_below[mask]
+            #        if len(front_below) == 0:
+            #            self.vprint(f"WARNING: no more element in front and pop due to upper bounds, ignore constraints")
+            #            pop_below = pop
+            #            front_below = front
+            #            break
+            #    pop = pop_below.tolist()
+            #    front = front_below.tolist()
+
             #st_nextp = time.time()
             #self.vprint(f"     Compute next point...")
             Population = np.asarray(pop)
@@ -624,7 +656,19 @@ class MOBayesianOpt(object):
                     Constraints -= y
 
         for i in range(self.NObj):
-            F[i] = -self.GP[i].predict(self.space.normalize(xx))[0] + Fator * Constraints
+            #F[i] = -self.GP[i].predict(self.space.normalize(xx))[0] + Fator * Constraints
+            F[i] = -self.GP[i].predict(self.space.normalize(xx))[0]
+
+        # Apply penalty for upper bounds on objectives
+        if self.obj_upper_bounds is not None:
+            add_penalty = False
+            for i in range(self.NObj):
+                if self.obj_upper_bounds[i] != 'inf' and (F[i] > upc[i]):
+                    add_penalty = True
+                    break
+            if add_penalty:
+                for i in range(self.NObj):
+                    F[i] += self.upc_penalty
 
         return F
 
