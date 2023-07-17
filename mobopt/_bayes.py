@@ -663,7 +663,7 @@ class MOBayesianOpt(object):
         if self.obj_upper_bounds is not None:
             add_penalty = False
             for i in range(self.NObj):
-                if self.obj_upper_bounds[i] != 'inf' and (F[i] > upc[i]):
+                if self.obj_upper_bounds[i] != 'inf' and (F[i] > self.obj_upper_bounds[i]):
                     add_penalty = True
                     break
             if add_penalty:
